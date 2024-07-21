@@ -91,6 +91,7 @@ export const login: RequestHandler<
       .cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: true,
+        sameSite:'none'
       })
       .json({
         message: "Login successful",
