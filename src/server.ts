@@ -8,20 +8,18 @@ import { errorHandler } from "./middlewares/errorHandler";
 import postRoutes from "./routes/posts";
 import userRoutes from "./routes/users";
 import commentRoutes from "./routes/comment";
-import  connectDb  from "./config/db";
 import mongoose from "mongoose";
 dotenv.config();
 
 const port = process.env.PORT || 5000 ;
 
-// connectDb()
-
 const app = express();
 
 app.use(morgran("dev"));
-// app.use(cors({
-//   origin:"*"
-// }));
+app.use(cors({
+  origin:true,
+  credentials:true
+}));
 app.use(
   express.json({
     limit: "16kb",
@@ -29,14 +27,12 @@ app.use(
 );
 app.use(cookieParser());
 
-// app.use(express.urlencoded({ extended: true,limit: "16kb" }));
 
 app.get('/api',(req,res,next)=>{
   res.status(201).json({
     message : 'Api is initialized'
   })
 })
-
 app.use("/api/posts", postRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/comment", commentRoutes);
