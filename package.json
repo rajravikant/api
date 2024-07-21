@@ -6,7 +6,7 @@
   "scripts": {
     "start": "nodemon src/server.ts",
     "vercel-build" : "echo building",
-    "build": "tsc",
+    "build": "npm install && tsc",
     "ts.check": "tsc --project tsconfig.json",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
