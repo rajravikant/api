@@ -9,7 +9,6 @@ import postRoutes from "./routes/posts";
 import userRoutes from "./routes/users";
 import commentRoutes from "./routes/comment";
 import mongoose from "mongoose";
-import { corsHeader } from "./middlewares/corsHeader";
 dotenv.config();
 
 const port = process.env.PORT || 5000 ;
@@ -19,7 +18,7 @@ const app = express();
 app.use(morgran("dev"));
 app.use(cors({
   credentials:true,
-  origin:true
+  origin:"http://localhost:5173"
 }));
 app.use(
   express.json({
@@ -29,7 +28,6 @@ app.use(
 app.use(cookieParser());
 
 
-app.use(corsHeader)
 
 app.use("/api/posts", postRoutes);
 app.use("/api/users", userRoutes);
