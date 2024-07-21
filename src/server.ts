@@ -19,10 +19,7 @@ const port = process.env.PORT || 5000 ;
 const app = express();
 
 app.use(morgran("dev"));
-app.use(cors({
-  origin : '*',
-  credentials : true
-}));
+app.use(cors());
 app.use(
   express.json({
     limit: "16kb",
