@@ -20,7 +20,8 @@ const app = express();
 
 app.use(morgran("dev"));
 app.use(cors({
-  origin : '*'
+  origin : '*',
+  credentials : true
 }));
 app.use(
   express.json({

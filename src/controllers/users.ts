@@ -90,7 +90,7 @@ export const login: RequestHandler<
       .status(200)
       .cookie("accessToken", accessToken, {
         httpOnly: true,
-        sameSite: "none",
+        secure: true,
       })
       .json({
         message: "Login successful",
@@ -168,8 +168,7 @@ export const logout: RequestHandler = async (req, res, next) => {
       .status(200)
       .clearCookie("accessToken", {
         httpOnly: true,
-        sameSite: "none",
-        // secure: true,
+        secure: true,
       })
       .json({ message: "Logged out successfully" });
   } catch (error) {
