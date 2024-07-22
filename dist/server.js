@@ -16,22 +16,16 @@ const comment_1 = __importDefault(require("./routes/comment"));
 const mongoose_1 = __importDefault(require("mongoose"));
 dotenv_1.default.config();
 const port = process.env.PORT || 5000;
-// connectDb()
 const app = (0, express_1.default)();
 app.use((0, morgan_1.default)("dev"));
 app.use((0, cors_1.default)({
-    origin: '*'
+    credentials: true,
+    origin: true
 }));
 app.use(express_1.default.json({
     limit: "16kb",
 }));
 app.use((0, cookie_parser_1.default)());
-// app.use(express.urlencoded({ extended: true,limit: "16kb" }));
-app.get('/api', (req, res, next) => {
-    res.status(201).json({
-        message: 'Api is initialized'
-    });
-});
 app.use("/api/posts", posts_1.default);
 app.use("/api/users", users_1.default);
 app.use("/api/comment", comment_1.default);

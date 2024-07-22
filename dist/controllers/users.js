@@ -71,7 +71,8 @@ const login = (req, res, next) => __awaiter(void 0, void 0, void 0, function* ()
             .status(200)
             .cookie("accessToken", accessToken, {
             httpOnly: true,
-            sameSite: "none",
+            secure: true,
+            sameSite: 'none'
         })
             .json({
             message: "Login successful",
@@ -136,8 +137,7 @@ const logout = (req, res, next) => __awaiter(void 0, void 0, void 0, function* (
             .status(200)
             .clearCookie("accessToken", {
             httpOnly: true,
-            sameSite: "none",
-            // secure: true,
+            secure: true,
         })
             .json({ message: "Logged out successfully" });
     }
