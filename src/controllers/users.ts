@@ -10,7 +10,6 @@ interface signUpBody {
   username?: string;
   email?: string;
   password?: string;
-  phone?: string;
   avatar?: string;
 }
 
@@ -20,9 +19,9 @@ export const signUp: RequestHandler<
   signUpBody,
   unknown
 > = async (req, res, next) => {
-  const { email, password, username, phone } = req.body;
+  const { email, password, username} = req.body;
   try {
-    if (!email || !password || !username || !phone) {
+    if (!email || !password || !username ) {
       throw createHttpError(400, "Please provide all fields");
     }
     const existingUserEmail = await User.findOne({ email });
@@ -43,10 +42,9 @@ export const signUp: RequestHandler<
       email,
       password: hashedPassword,
       username,
-      phone,
     });
 
-    res.status(201).json(Newuser);
+    res.status(201).json({message : 'Account created succesfully',user : Newuser.username});
   } catch (error) {
     next(error);
   }
@@ -111,7 +109,7 @@ export const googleLogin: RequestHandler<
 > = async (req, res, next) => {
   const { email, avatar, username } = req.body;
   try {
-    if (!email || !avatar || !username) {
+    if (!email || !username) {
       throw createHttpError(400, "Email or phone is required");
     }
     const existingUser = await User.findOne({ email });
@@ -128,6 +126,7 @@ export const googleLogin: RequestHandler<
         .cookie("accessToken", accessToken, {
           httpOnly: true,
           secure: true,
+          sameSite:'none'
         })
         .json({
           message: "Login successful",
@@ -136,26 +135,34 @@ export const googleLogin: RequestHandler<
         });
       return;
     }
-    const randomPassword = Math.random().toString(36).slice(-10);
-    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+    const rawPassword = Math.random().toString(36).slice(-10);
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
     const NewUser = await User.create({
       email,
       password: hashedPassword,
       username,
       avatar,
     });
-    res.status(201).json(NewUser);
+    const accessToken = jwt.sign({ id: NewUser._id },process.env.JWT_SECRET!,{
+        expiresIn: process.env.JWT_EXPIRES_IN,
+      }
+    )
+
+    res.status(200).cookie('accessToken',accessToken,{
+      httpOnly: true,
+      secure: true,
+      sameSite:'none'
+    }).json({
+      message : 'Login success',
+      accessToken,
+      existingUser : NewUser,
+    });
   } catch (error) {
     next(error);
   }
 };
 
-export const phoneLogin: RequestHandler<
-  unknown,
-  unknown,
-  signUpBody,
-  unknown
-> = async (req, res, next) => {};
+
 
 export const logout: RequestHandler = async (req, res, next) => {
   // @ts-ignore
@@ -226,8 +233,6 @@ interface updateUserBody {
   email?: string;
   username?: string;
   password?: string;
-  phone?: string;
-  posts?: string[];
 }
 
 export const updateUser: RequestHandler<
@@ -240,7 +245,7 @@ export const updateUser: RequestHandler<
   const userId = req.userId as string | undefined;
   const file = req.file;
   let avatar: string | undefined;
-  const { username, phone, password, posts , email } = req.body;
+  const { username,password,email } = req.body;
   try {
     if (!userId) {
       throw createHttpError(401, "Unauthorized Access Cannot update user");
@@ -259,12 +264,10 @@ export const updateUser: RequestHandler<
       {
         username: username || existingUser.username,
         email: email || existingUser.email,
-        phone: phone || existingUser.phone,
         avatar: avatar || existingUser.avatar,
         password: password
           ? await bcrypt.hash(password, 10)
           : existingUser.password,
-        posts: posts || existingUser.posts,
       },
       {
         new: true,

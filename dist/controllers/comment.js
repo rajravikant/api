@@ -77,10 +77,14 @@ const deleteComment = (req, res, next) => __awaiter(void 0, void 0, void 0, func
         throw (0, http_errors_1.default)(400, "Comment id is required");
     }
     try {
-        const comment = yield Comment_1.default.findOneAndDelete({ _id: commentId, creator });
+        const comment = yield Comment_1.default.findByIdAndDelete(commentId);
         if (!comment) {
             throw (0, http_errors_1.default)(404, "Comment not found");
         }
+        const postId = comment.post;
+        yield Post_1.default.findByIdAndUpdate(postId, {
+            $pull: { comments: commentId },
+        });
         res.status(200).json({ message: "Comment deleted successfully" });
     }
     catch (error) {

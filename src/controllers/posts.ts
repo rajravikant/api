@@ -8,7 +8,7 @@ import { uploadFile } from "../middlewares/multer";
 export const getPosts: RequestHandler = async (req, res, next) => {
   const startIndex = req.query.startIndex
     ? parseInt(req.query.startIndex as string)
-    : 0;
+    : 1;
   const limit = req.query.limit ? parseInt(req.query.limit as string) : 6;
   const direction = req.query.direction === "asc" ? 1 : -1;
 
@@ -29,8 +29,8 @@ export const getPosts: RequestHandler = async (req, res, next) => {
         ],
       }),
     })
-      .sort({ updatedAt: direction }).populate("creator","username").populate({"path":"comments","populate":"creator"})
-      .skip(startIndex)
+      .sort({ updatedAt: direction }).populate("creator","username avatar").populate({"path":"comments","populate":"creator"})
+      .skip((startIndex - 1)*limit)
       .limit(limit)
       .exec();
 
@@ -38,7 +38,7 @@ export const getPosts: RequestHandler = async (req, res, next) => {
 
     res.status(200).json({
       posts,
-      totalPosts: totalDocuments,
+      totalPosts: Math.ceil(totalDocuments / limit),
     });
   } catch (error) {
     next(error);

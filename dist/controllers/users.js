@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getProfile = exports.updateUser = exports.removeUser = exports.forgotPassword = exports.logout = exports.phoneLogin = exports.googleLogin = exports.login = exports.signUp = void 0;
+exports.getProfile = exports.updateUser = exports.removeUser = exports.forgotPassword = exports.logout = exports.googleLogin = exports.login = exports.signUp = void 0;
 const http_errors_1 = __importDefault(require("http-errors"));
 const User_1 = __importDefault(require("../models/User"));
 const Post_1 = __importDefault(require("../models/Post"));
@@ -21,9 +21,9 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const multer_1 = require("../middlewares/multer");
 const signUp = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    const { email, password, username, phone } = req.body;
+    const { email, password, username } = req.body;
     try {
-        if (!email || !password || !username || !phone) {
+        if (!email || !password || !username) {
             throw (0, http_errors_1.default)(400, "Please provide all fields");
         }
         const existingUserEmail = yield User_1.default.findOne({ email });
@@ -39,9 +39,8 @@ const signUp = (req, res, next) => __awaiter(void 0, void 0, void 0, function* (
             email,
             password: hashedPassword,
             username,
-            phone,
         });
-        res.status(201).json(Newuser);
+        res.status(201).json({ message: 'Account created succesfully', user: Newuser.username });
     }
     catch (error) {
         next(error);
@@ -88,7 +87,7 @@ exports.login = login;
 const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     const { email, avatar, username } = req.body;
     try {
-        if (!email || !avatar || !username) {
+        if (!email || !username) {
             throw (0, http_errors_1.default)(400, "Email or phone is required");
         }
         const existingUser = yield User_1.default.findOne({ email });
@@ -101,6 +100,7 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
                 .cookie("accessToken", accessToken, {
                 httpOnly: true,
                 secure: true,
+                sameSite: 'none'
             })
                 .json({
                 message: "Login successful",
@@ -109,23 +109,32 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
             });
             return;
         }
-        const randomPassword = Math.random().toString(36).slice(-10);
-        const hashedPassword = yield bcrypt_1.default.hash(randomPassword, 10);
+        const rawPassword = Math.random().toString(36).slice(-10);
+        const hashedPassword = yield bcrypt_1.default.hash(rawPassword, 10);
         const NewUser = yield User_1.default.create({
             email,
             password: hashedPassword,
             username,
             avatar,
         });
-        res.status(201).json(NewUser);
+        const accessToken = jsonwebtoken_1.default.sign({ id: NewUser._id }, process.env.JWT_SECRET, {
+            expiresIn: process.env.JWT_EXPIRES_IN,
+        });
+        res.status(200).cookie('accessToken', accessToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'none'
+        }).json({
+            message: 'Login success',
+            accessToken,
+            existingUser: NewUser,
+        });
     }
     catch (error) {
         next(error);
     }
 });
 exports.googleLogin = googleLogin;
-const phoneLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () { });
-exports.phoneLogin = phoneLogin;
 const logout = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     // @ts-ignore
     const userId = req.userId;
@@ -191,7 +200,7 @@ const updateUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
     const userId = req.userId;
     const file = req.file;
     let avatar;
-    const { username, phone, password, posts, email } = req.body;
+    const { username, password, email } = req.body;
     try {
         if (!userId) {
             throw (0, http_errors_1.default)(401, "Unauthorized Access Cannot update user");
@@ -206,12 +215,10 @@ const updateUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
         const updatedUser = yield User_1.default.findByIdAndUpdate(userId, {
             username: username || existingUser.username,
             email: email || existingUser.email,
-            phone: phone || existingUser.phone,
             avatar: avatar || existingUser.avatar,
             password: password
                 ? yield bcrypt_1.default.hash(password, 10)
                 : existingUser.password,
-            posts: posts || existingUser.posts,
         }, {
             new: true,
         });

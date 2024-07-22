@@ -73,10 +73,14 @@ export const deleteComment: RequestHandler = async (req, res, next) => {
   }
 
   try {
-    const comment = await Comment.findOneAndDelete({ _id: commentId, creator });
+    const comment = await Comment.findByIdAndDelete(commentId);
     if (!comment) {
       throw createHttpError(404, "Comment not found");
     }
+    const postId = comment.post
+    await Post.findByIdAndUpdate(postId, {
+      $pull: { comments: commentId },
+    });
     res.status(200).json({ message: "Comment deleted successfully" });
   } catch (error) {
     next(error);

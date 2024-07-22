@@ -21,7 +21,7 @@ const multer_1 = require("../middlewares/multer");
 const getPosts = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     const startIndex = req.query.startIndex
         ? parseInt(req.query.startIndex)
-        : 0;
+        : 1;
     const limit = req.query.limit ? parseInt(req.query.limit) : 6;
     const direction = req.query.direction === "asc" ? 1 : -1;
     const category = req.query.category && req.query.category;
@@ -36,14 +36,14 @@ const getPosts = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
                 { category: { $regex: searchTerm, $options: "i" } },
             ],
         })))
-            .sort({ updatedAt: direction }).populate("creator", "username").populate({ "path": "comments", "populate": "creator" })
-            .skip(startIndex)
+            .sort({ updatedAt: direction }).populate("creator", "username avatar").populate({ "path": "comments", "populate": "creator" })
+            .skip((startIndex - 1) * limit)
             .limit(limit)
             .exec();
         const totalDocuments = yield Post_1.default.countDocuments().exec();
         res.status(200).json({
             posts,
-            totalPosts: totalDocuments,
+            totalPosts: Math.ceil(totalDocuments / limit),
         });
     }
     catch (error) {
