@@ -11,9 +11,9 @@ export const isAuth:RequestHandler  = (req, res, next) => {
      if (!token) {
        throw createHttpError(401, "Unauthorized Access");
      }
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET!);
+    const decodedToken = jwt.verify(token, process.env.JWT_ACCESS_TOKEN_SECRET!);
     if (!decodedToken) {
-      throw createHttpError(401, "JWT Malfunctioned please login again");
+      throw createHttpError(403, "Invalid token or expired");
     }
     // @ts-ignore
     req.userId = decodedToken.id;

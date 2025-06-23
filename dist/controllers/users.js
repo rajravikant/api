@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getProfile = exports.updateUser = exports.removeUser = exports.forgotPassword = exports.logout = exports.googleLogin = exports.login = exports.signUp = void 0;
+exports.refreshToken = exports.getProfile = exports.updateUser = exports.removeUser = exports.forgotPassword = exports.logout = exports.googleLogin = exports.login = exports.signUp = void 0;
 const http_errors_1 = __importDefault(require("http-errors"));
 const User_1 = __importDefault(require("../models/User"));
 const Post_1 = __importDefault(require("../models/Post"));
@@ -20,6 +20,15 @@ const Comment_1 = __importDefault(require("../models/Comment"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const multer_1 = require("../middlewares/multer");
+function generateTokens(userId) {
+    const accessToken = jsonwebtoken_1.default.sign({ id: userId }, process.env.JWT_ACCESS_TOKEN_SECRET, {
+        expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
+    });
+    const refreshToken = jsonwebtoken_1.default.sign({ id: userId }, process.env.JWT_REFRESH_TOKEN_SECRET, {
+        expiresIn: process.env.JWT_REFRESH_TOKEN_EXPIRES_IN,
+    });
+    return { accessToken, refreshToken };
+}
 const signUp = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     const { email, password, username } = req.body;
     try {
@@ -40,7 +49,9 @@ const signUp = (req, res, next) => __awaiter(void 0, void 0, void 0, function* (
             password: hashedPassword,
             username,
         });
-        res.status(201).json({ message: 'Account created succesfully', user: Newuser.username });
+        res
+            .status(201)
+            .json({ message: "Account created succesfully", user: Newuser.username });
     }
     catch (error) {
         next(error);
@@ -63,19 +74,24 @@ const login = (req, res, next) => __awaiter(void 0, void 0, void 0, function* ()
         if (!isPasswordValid) {
             throw (0, http_errors_1.default)(401, "Invalid credentials");
         }
-        const accessToken = jsonwebtoken_1.default.sign({ id: existingUser._id }, process.env.JWT_SECRET, {
-            expiresIn: process.env.JWT_EXPIRES_IN,
-        });
+        const { accessToken, refreshToken } = generateTokens(existingUser._id.toString());
         res
             .status(200)
             .cookie("accessToken", accessToken, {
             httpOnly: true,
             secure: true,
-            sameSite: 'none'
+            sameSite: "none",
+        })
+            .cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "none",
+            maxAge: 10 * 24 * 60 * 60 * 1000, // 10 days
         })
             .json({
             message: "Login successful",
             accessToken,
+            refreshToken,
             existingUser,
         });
     }
@@ -92,15 +108,15 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
         }
         const existingUser = yield User_1.default.findOne({ email });
         if (existingUser) {
-            const accessToken = jsonwebtoken_1.default.sign({ id: existingUser._id }, process.env.JWT_SECRET, {
-                expiresIn: process.env.JWT_EXPIRES_IN,
+            const accessToken = jsonwebtoken_1.default.sign({ id: existingUser._id }, process.env.JWT_ACCESS_TOKEN_SECRET, {
+                expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
             });
             res
                 .status(200)
                 .cookie("accessToken", accessToken, {
                 httpOnly: true,
                 secure: true,
-                sameSite: 'none'
+                sameSite: "none",
             })
                 .json({
                 message: "Login successful",
@@ -117,15 +133,18 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
             username,
             avatar,
         });
-        const accessToken = jsonwebtoken_1.default.sign({ id: NewUser._id }, process.env.JWT_SECRET, {
-            expiresIn: process.env.JWT_EXPIRES_IN,
+        const accessToken = jsonwebtoken_1.default.sign({ id: NewUser._id }, process.env.JWT_ACCESS_TOKEN_SECRET, {
+            expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
         });
-        res.status(200).cookie('accessToken', accessToken, {
+        res
+            .status(200)
+            .cookie("accessToken", accessToken, {
             httpOnly: true,
             secure: true,
-            sameSite: 'none'
-        }).json({
-            message: 'Login success',
+            sameSite: "none",
+        })
+            .json({
+            message: "Login success",
             accessToken,
             existingUser: NewUser,
         });
@@ -137,18 +156,23 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
 exports.googleLogin = googleLogin;
 const logout = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     // @ts-ignore
-    const userId = req.userId;
+    // const userId: string | undefined = req.userId;
+    const { accessToken, refreshToken } = req.cookies;
+    if (!accessToken || !refreshToken) {
+        return res.sendStatus(204); // No Content
+    }
     try {
-        if (!userId) {
-            throw (0, http_errors_1.default)(401, "Unauthorized Access Cannot logout");
-        }
         res
             .status(200)
             .clearCookie("accessToken", {
             httpOnly: true,
             secure: true,
         })
-            .json({ message: "Logged out successfully" });
+            .clearCookie("refreshToken", {
+            httpOnly: true,
+            secure: true,
+        })
+            .status(204).json({ message: "Logout successful" });
     }
     catch (error) {
         next(error);
@@ -188,7 +212,16 @@ const removeUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
         // delete all posts and comments by user
         yield Post_1.default.deleteMany({ creator: userId });
         yield Comment_1.default.deleteMany({ creator: userId });
-        res.status(200).json({ message: "User deleted successfully" });
+        res.status(200)
+            .clearCookie("accessToken", {
+            httpOnly: true,
+            secure: true,
+        })
+            .clearCookie("refreshToken", {
+            httpOnly: true,
+            secure: true,
+        })
+            .json({ message: "User deleted successfully" });
     }
     catch (error) {
         next(error);
@@ -238,8 +271,8 @@ const getProfile = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
         const user = yield User_1.default.findOne({ username }).populate({
             path: "posts",
             populate: {
-                path: "creator"
-            }
+                path: "creator",
+            },
         });
         if (!user) {
             throw (0, http_errors_1.default)(404, "User not found");
@@ -251,3 +284,25 @@ const getProfile = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
     }
 });
 exports.getProfile = getProfile;
+const refreshToken = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    const cookies = req.cookies;
+    const body = req.body;
+    const refreshToken = cookies.refreshToken || body.refreshToken;
+    if (!refreshToken)
+        return res.sendStatus(401); // Unauthorized
+    try {
+        const decoded = jsonwebtoken_1.default.verify(refreshToken, process.env.JWT_REFRESH_TOKEN_SECRET);
+        // @ts-ignore
+        const user = yield User_1.default.findById(decoded.id);
+        if (!user)
+            return res.sendStatus(403); // Forbidden
+        const newAccessToken = jsonwebtoken_1.default.sign({ id: user._id.toString() }, process.env.JWT_ACCESS_TOKEN_SECRET, {
+            expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
+        });
+        res.status(200).json({ accessToken: newAccessToken });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+exports.refreshToken = refreshToken;

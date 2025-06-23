@@ -6,6 +6,26 @@ import Comment from "../models/Comment";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { uploadFile } from "../middlewares/multer";
+
+function generateTokens(userId: string) {
+  const accessToken = jwt.sign(
+    { id: userId },
+    process.env.JWT_ACCESS_TOKEN_SECRET!,
+    {
+      expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN!,
+    }
+  );
+  const refreshToken = jwt.sign(
+    { id: userId },
+    process.env.JWT_REFRESH_TOKEN_SECRET!,
+    {
+      expiresIn: process.env.JWT_REFRESH_TOKEN_EXPIRES_IN!,
+    }
+  );
+
+  return { accessToken, refreshToken };
+}
+
 interface signUpBody {
   username?: string;
   email?: string;
@@ -19,9 +39,9 @@ export const signUp: RequestHandler<
   signUpBody,
   unknown
 > = async (req, res, next) => {
-  const { email, password, username} = req.body;
+  const { email, password, username } = req.body;
   try {
-    if (!email || !password || !username ) {
+    if (!email || !password || !username) {
       throw createHttpError(400, "Please provide all fields");
     }
     const existingUserEmail = await User.findOne({ email });
@@ -44,7 +64,9 @@ export const signUp: RequestHandler<
       username,
     });
 
-    res.status(201).json({message : 'Account created succesfully',user : Newuser.username});
+    res
+      .status(201)
+      .json({ message: "Account created succesfully", user: Newuser.username });
   } catch (error) {
     next(error);
   }
@@ -76,12 +98,8 @@ export const login: RequestHandler<
       throw createHttpError(401, "Invalid credentials");
     }
 
-    const accessToken = jwt.sign(
-      { id: existingUser._id },
-      process.env.JWT_SECRET!,
-      {
-        expiresIn: process.env.JWT_EXPIRES_IN,
-      }
+    const { accessToken, refreshToken } = generateTokens(
+      existingUser._id.toString()
     );
 
     res
@@ -89,11 +107,18 @@ export const login: RequestHandler<
       .cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: true,
-        sameSite:'none'
+        sameSite: "none",
+      })
+      .cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 10 * 24 * 60 * 60 * 1000, // 10 days
       })
       .json({
         message: "Login successful",
         accessToken,
+        refreshToken,
         existingUser,
       });
   } catch (error) {
@@ -116,9 +141,9 @@ export const googleLogin: RequestHandler<
     if (existingUser) {
       const accessToken = jwt.sign(
         { id: existingUser._id },
-        process.env.JWT_SECRET!,
+        process.env.JWT_ACCESS_TOKEN_SECRET!,
         {
-          expiresIn: process.env.JWT_EXPIRES_IN,
+          expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
         }
       );
       res
@@ -126,7 +151,7 @@ export const googleLogin: RequestHandler<
         .cookie("accessToken", accessToken, {
           httpOnly: true,
           secure: true,
-          sameSite:'none'
+          sameSite: "none",
         })
         .json({
           message: "Login successful",
@@ -143,42 +168,51 @@ export const googleLogin: RequestHandler<
       username,
       avatar,
     });
-    const accessToken = jwt.sign({ id: NewUser._id },process.env.JWT_SECRET!,{
-        expiresIn: process.env.JWT_EXPIRES_IN,
+    const accessToken = jwt.sign(
+      { id: NewUser._id },
+      process.env.JWT_ACCESS_TOKEN_SECRET!,
+      {
+        expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
       }
-    )
+    );
 
-    res.status(200).cookie('accessToken',accessToken,{
-      httpOnly: true,
-      secure: true,
-      sameSite:'none'
-    }).json({
-      message : 'Login success',
-      accessToken,
-      existingUser : NewUser,
-    });
+    res
+      .status(200)
+      .cookie("accessToken", accessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+      })
+      .json({
+        message: "Login success",
+        accessToken,
+        existingUser: NewUser,
+      });
   } catch (error) {
     next(error);
   }
 };
 
-
-
 export const logout: RequestHandler = async (req, res, next) => {
   // @ts-ignore
-  const userId: string | undefined = req.userId;
+  // const userId: string | undefined = req.userId;
 
+  const { accessToken, refreshToken } = req.cookies
+  if (!accessToken || !refreshToken) {
+    return res.sendStatus(204); // No Content
+  }
   try {
-    if (!userId) {
-      throw createHttpError(401, "Unauthorized Access Cannot logout");
-    }
     res
       .status(200)
       .clearCookie("accessToken", {
         httpOnly: true,
         secure: true,
       })
-      .json({ message: "Logged out successfully" });
+      .clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: true,
+      })
+      .status(204).json({ message: "Logout successful" });
   } catch (error) {
     next(error);
   }
@@ -223,7 +257,16 @@ export const removeUser: RequestHandler = async (req, res, next) => {
     await Post.deleteMany({ creator: userId });
     await Comment.deleteMany({ creator: userId });
 
-    res.status(200).json({ message: "User deleted successfully" });
+    res.status(200)
+    .clearCookie("accessToken", {
+      httpOnly: true,
+      secure: true,
+    })
+    .clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: true,
+    })
+    .json({ message: "User deleted successfully" });
   } catch (error) {
     next(error);
   }
@@ -245,7 +288,7 @@ export const updateUser: RequestHandler<
   const userId = req.userId as string | undefined;
   const file = req.file;
   let avatar: string | undefined;
-  const { username,password,email } = req.body;
+  const { username, password, email } = req.body;
   try {
     if (!userId) {
       throw createHttpError(401, "Unauthorized Access Cannot update user");
@@ -279,8 +322,6 @@ export const updateUser: RequestHandler<
   }
 };
 
-
-
 export const getProfile: RequestHandler = async (req, res, next) => {
   const { username } = req.params;
   try {
@@ -288,10 +329,10 @@ export const getProfile: RequestHandler = async (req, res, next) => {
       throw createHttpError(400, "Username is required");
     }
     const user = await User.findOne({ username }).populate({
-      path : "posts",
-      populate : {
-        path : "creator"
-      }
+      path: "posts",
+      populate: {
+        path: "creator",
+      },
     });
     if (!user) {
       throw createHttpError(404, "User not found");
@@ -300,4 +341,37 @@ export const getProfile: RequestHandler = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-}
+};
+
+export const refreshToken: RequestHandler = async (req, res, next) => {
+  const cookies = req.cookies;
+  const body = req.body
+
+  const refreshToken = cookies.refreshToken || body.refreshToken;
+  if (!refreshToken) return res.sendStatus(401); // Unauthorized
+  
+  try {
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.JWT_REFRESH_TOKEN_SECRET!
+    );
+
+    
+
+    // @ts-ignore
+    const user = await User.findById(decoded.id);
+    if (!user) return res.sendStatus(403); // Forbidden
+
+    
+    const newAccessToken = jwt.sign(
+      { id: user._id.toString() },
+      process.env.JWT_ACCESS_TOKEN_SECRET!,
+      {
+        expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN!,
+      }
+    );
+    res.status(200).json({ accessToken: newAccessToken });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -13,9 +13,9 @@ const isAuth = (req, res, next) => {
         if (!token) {
             throw (0, http_errors_1.default)(401, "Unauthorized Access");
         }
-        const decodedToken = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+        const decodedToken = jsonwebtoken_1.default.verify(token, process.env.JWT_ACCESS_TOKEN_SECRET);
         if (!decodedToken) {
-            throw (0, http_errors_1.default)(401, "JWT Malfunctioned please login again");
+            throw (0, http_errors_1.default)(403, "Invalid token or expired");
         }
         // @ts-ignore
         req.userId = decodedToken.id;
