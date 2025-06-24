@@ -11,8 +11,8 @@ export const getPosts: RequestHandler = async (req, res, next) => {
     : 1;
   const limit = req.query.limit ? parseInt(req.query.limit as string) : 6;
   const direction = req.query.direction === "asc" ? 1 : -1;
-
   const category = req.query.category && (req.query.category as string);
+  const tag = req.query.tag && (req.query.tag as string);
   const slug = req.query.slug && (req.query.slug as string);
   const searchTerm = req.query.searchTerm && (req.query.searchTerm as string);
   const creator = req.query.creator && (req.query.creator as string);
@@ -21,6 +21,7 @@ export const getPosts: RequestHandler = async (req, res, next) => {
       ...(category && { category }),
       ...(creator && { creator }),
       ...(slug && { slug }),
+      ...(tag && { tag }),
       ...(searchTerm && {
         $or: [
           { title: { $regex: searchTerm, $options: "i" } },
@@ -45,21 +46,7 @@ export const getPosts: RequestHandler = async (req, res, next) => {
   }
 };
 
-export const getPost: RequestHandler = async (req, res, next) => {
-  const { postId } = req.params;
-  try {
-    if (!mongoose.isValidObjectId(postId)) {
-      throw createHttpError(400, "Invalid post id");
-    }
-    const post = await Post.findById(postId).exec();
-    if (!post) {
-      throw createHttpError(404, "Post not found");
-    }
-    res.status(200).json(post);
-  } catch (error) {
-    next(error);
-  }
-};
+
 
 interface CreatePostRequestBody {
   title?: string;
@@ -68,6 +55,7 @@ interface CreatePostRequestBody {
   imageUrl?: string;
   category?: string;
   creator?: string;
+  tags?: string;
 }
 
 export const createPost: RequestHandler<
@@ -76,13 +64,13 @@ export const createPost: RequestHandler<
   CreatePostRequestBody,
   unknown
 > = async (req, res, next) => {
-  const { title, content, category, summary } = req.body;
+  const { title, content, category, summary,tags } = req.body;
   const file = req.file;
   // @ts-ignore
   const userId: string | undefined = req.userId;
 
   try {
-    if (!title || !content || !category || !summary) {
+    if (!title || !content || !category || !summary || !tags) {
       throw createHttpError(400, "Missing required fields");
     }
     
@@ -98,6 +86,9 @@ export const createPost: RequestHandler<
       .join("-")
       .replace(/[^a-zA-Z0-9-]/g, "-");
 
+    
+    const tagArray = tags.split(",").map((tag) => tag.trim());
+
     const savedPost = await Post.create({
       title,
       content,
@@ -105,6 +96,7 @@ export const createPost: RequestHandler<
       imageUrl : image,
       category,
       summary,
+      tags: tagArray,
       creator: userId,
     });
 
@@ -138,7 +130,7 @@ export const updatePost: RequestHandler<
   const userId: string | undefined = req.userId;
   const file = req.file;
   const { postId } = req.params;
-  const { title, content, imageUrl, category, summary } = req.body;
+  const { title, content, category, summary,tags } = req.body;
   let slug: string | undefined;
   if (title) {
     slug = title
@@ -166,12 +158,17 @@ export const updatePost: RequestHandler<
       const image = await uploadFile(file);
       post.imageUrl = image || post.imageUrl;
     }
+
+
+  
+
     // Update the post
     post.title = title || post.title;
     post.content = content || post.content;
     post.category = category || post.category;
     post.summary = summary || post.summary;
     post.slug = slug || post.slug;
+    post.tags = tags ? tags.split(",").map((tag) => tag.trim()) : post.tags;
 
     const updatedPost = await post.save();
     res.status(200).json(updatedPost);

@@ -7,6 +7,11 @@ const postSchema = new Schema(
       required: true,
       unique: true,
     },
+     slug: {
+      type: String,
+      required: true,
+      unique: true,
+    },
     content: {
       type: String,
       required: true,
@@ -25,10 +30,9 @@ const postSchema = new Schema(
       required: true,
       default:"uncategorized"
     },
-    slug: {
-      type: String,
-      required: true,
-      unique: true,
+    tags: {
+      type: [String],
+      default: [],
     },
     creator: {
       type: Schema.Types.ObjectId,

@@ -11,7 +11,6 @@ router
 
 router
   .route("/:postId")
-  .get(postController.getPost)
   .patch(isAuth, upload.single("image"), postController.updatePost)
   .delete(isAuth, postController.deletePost);
 
