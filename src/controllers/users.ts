@@ -238,7 +238,10 @@ export const forgotPassword: RequestHandler<
     await User.findByIdAndUpdate(existingUser._id, {
       password: hashedPassword,
     });
-    res.status(200).json({ message: "Password reset successful" });
+    res.status(200).json({ 
+      message: "Password reset successful",
+      newPassword: randomPassword
+    });
   } catch (error) {
     next(error);
   }
@@ -289,6 +292,7 @@ export const updateUser: RequestHandler<
   const file = req.file;
   let avatar: string | undefined;
   const { username, password, email } = req.body;
+  
   try {
     if (!userId) {
       throw createHttpError(401, "Unauthorized Access Cannot update user");

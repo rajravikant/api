@@ -8,6 +8,7 @@ const router = express.Router();
 
 router.put('/signup',userController.signUp);
 router.post('/login',userController.login);
+router.post('/forgot',userController.forgotPassword);
 router.post('/refresh',userController.refreshToken);
 router.get('/:username',userController.getProfile);
 router.patch('/update',isAuth,upload.single("avatar"),userController.updateUser);
