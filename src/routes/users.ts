@@ -3,9 +3,6 @@ import * as userController from '../controllers/users';
 import { isAuth } from '../middlewares/isAuth';
 import { upload } from '../middlewares/multer';
 const router = express.Router();
-
-
-
 router.put('/signup',userController.signUp);
 router.post('/login',userController.login);
 router.post('/forgot',userController.forgotPassword);

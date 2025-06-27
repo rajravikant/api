@@ -35,6 +35,8 @@ app.get("/", (req, res) => {
   res.send(`<h1>Server is running</h1> <a href="/api/posts">Posts</a> `);
 });
 
+
+
 app.use("/api/posts", postRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/comment", commentRoutes);

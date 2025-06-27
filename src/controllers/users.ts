@@ -139,13 +139,7 @@ export const googleLogin: RequestHandler<
     }
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      const accessToken = jwt.sign(
-        { id: existingUser._id },
-        process.env.JWT_ACCESS_TOKEN_SECRET!,
-        {
-          expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
-        }
-      );
+      const {accessToken,refreshToken} = generateTokens(existingUser._id.toString());
       res
         .status(200)
         .cookie("accessToken", accessToken, {
@@ -153,9 +147,16 @@ export const googleLogin: RequestHandler<
           secure: true,
           sameSite: "none",
         })
+        .cookie("refreshToken", refreshToken, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "none",
+          maxAge: 10 * 24 * 60 * 60 * 1000, // 10 days
+        })
         .json({
           message: "Login successful",
           accessToken,
+          refreshToken,
           existingUser,
         });
       return;
@@ -168,14 +169,8 @@ export const googleLogin: RequestHandler<
       username,
       avatar,
     });
-    const accessToken = jwt.sign(
-      { id: NewUser._id },
-      process.env.JWT_ACCESS_TOKEN_SECRET!,
-      {
-        expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
-      }
-    );
-
+    const {accessToken,refreshToken} = generateTokens(NewUser._id.toString())
+    
     res
       .status(200)
       .cookie("accessToken", accessToken, {
@@ -183,9 +178,16 @@ export const googleLogin: RequestHandler<
         secure: true,
         sameSite: "none",
       })
+      .cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 10 * 24 * 60 * 60 * 1000, // 10 days
+      })
       .json({
         message: "Login success",
         accessToken,
+        refreshToken,
         existingUser: NewUser,
       });
   } catch (error) {
@@ -326,6 +328,9 @@ export const updateUser: RequestHandler<
   }
 };
 
+
+
+
 export const getProfile: RequestHandler = async (req, res, next) => {
   const { username } = req.params;
   try {
@@ -379,3 +384,5 @@ export const refreshToken: RequestHandler = async (req, res, next) => {
     next(error);
   }
 };
+
+
