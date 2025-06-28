@@ -37,7 +37,6 @@ router
     .post(isAuth_1.isAuth, multer_1.upload.single("image"), postController.createPost);
 router
     .route("/:postId")
-    .get(postController.getPost)
     .patch(isAuth_1.isAuth, multer_1.upload.single("image"), postController.updatePost)
     .delete(isAuth_1.isAuth, postController.deletePost);
 exports.default = router;

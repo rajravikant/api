@@ -108,9 +108,7 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
         }
         const existingUser = yield User_1.default.findOne({ email });
         if (existingUser) {
-            const accessToken = jsonwebtoken_1.default.sign({ id: existingUser._id }, process.env.JWT_ACCESS_TOKEN_SECRET, {
-                expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
-            });
+            const { accessToken, refreshToken } = generateTokens(existingUser._id.toString());
             res
                 .status(200)
                 .cookie("accessToken", accessToken, {
@@ -118,9 +116,16 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
                 secure: true,
                 sameSite: "none",
             })
+                .cookie("refreshToken", refreshToken, {
+                httpOnly: true,
+                secure: true,
+                sameSite: "none",
+                maxAge: 10 * 24 * 60 * 60 * 1000, // 10 days
+            })
                 .json({
                 message: "Login successful",
                 accessToken,
+                refreshToken,
                 existingUser,
             });
             return;
@@ -133,9 +138,7 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
             username,
             avatar,
         });
-        const accessToken = jsonwebtoken_1.default.sign({ id: NewUser._id }, process.env.JWT_ACCESS_TOKEN_SECRET, {
-            expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
-        });
+        const { accessToken, refreshToken } = generateTokens(NewUser._id.toString());
         res
             .status(200)
             .cookie("accessToken", accessToken, {
@@ -143,9 +146,16 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
             secure: true,
             sameSite: "none",
         })
+            .cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "none",
+            maxAge: 10 * 24 * 60 * 60 * 1000, // 10 days
+        })
             .json({
             message: "Login success",
             accessToken,
+            refreshToken,
             existingUser: NewUser,
         });
     }
@@ -194,7 +204,10 @@ const forgotPassword = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
         yield User_1.default.findByIdAndUpdate(existingUser._id, {
             password: hashedPassword,
         });
-        res.status(200).json({ message: "Password reset successful" });
+        res.status(200).json({
+            message: "Password reset successful",
+            newPassword: randomPassword
+        });
     }
     catch (error) {
         next(error);
