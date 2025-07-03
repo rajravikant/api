@@ -6,6 +6,7 @@ import Comment from "../models/Comment";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { uploadFile } from "../middlewares/multer";
+import { LikeModel } from "../models/Like";
 
 function generateTokens(userId: string) {
   const accessToken = jwt.sign(
@@ -85,7 +86,12 @@ export const login: RequestHandler<
     }
     const existingUser = await User.findOne({
       $or: [{ email }, { username }],
-    }).select("+password");
+    }).select("+password")
+    
+    
+    
+    
+    
     if (!existingUser) {
       throw createHttpError(404, "User does not exist");
     }
@@ -119,7 +125,10 @@ export const login: RequestHandler<
         message: "Login successful",
         accessToken,
         refreshToken,
-        existingUser,
+        user : {userId : existingUser._id.toString(), 
+          username: existingUser.username,
+          avatar: existingUser.avatar,
+        },
       });
   } catch (error) {
     next(error);
@@ -157,7 +166,7 @@ export const googleLogin: RequestHandler<
           message: "Login successful",
           accessToken,
           refreshToken,
-          existingUser,
+          user : {userId : existingUser._id.toString(), username: existingUser.username,avatar: existingUser.avatar},
         });
       return;
     }
@@ -188,7 +197,7 @@ export const googleLogin: RequestHandler<
         message: "Login success",
         accessToken,
         refreshToken,
-        existingUser: NewUser,
+        user: { userId: NewUser._id.toString(), username: NewUser.username ,avatar: NewUser.avatar},
       });
   } catch (error) {
     next(error);
@@ -258,9 +267,20 @@ export const removeUser: RequestHandler = async (req, res, next) => {
     }
     await User.findByIdAndDelete(userId);
 
-    // delete all posts and comments by user
+    // delete all posts, comments, and likes associated with the user
     await Post.deleteMany({ creator: userId });
     await Comment.deleteMany({ creator: userId });
+    await LikeModel.deleteMany({ creator: userId });
+    await User.updateMany(
+      { following: userId },
+      { $pull: { following: userId } }
+    );
+    await User.updateMany(
+      { followers: userId },
+      { $pull: { followers: userId } }
+    );
+
+
 
     res.status(200)
     .clearCookie("accessToken", {
@@ -281,6 +301,7 @@ interface updateUserBody {
   email?: string;
   username?: string;
   password?: string;
+  bio?: string;
 }
 
 export const updateUser: RequestHandler<
@@ -293,7 +314,7 @@ export const updateUser: RequestHandler<
   const userId = req.userId as string | undefined;
   const file = req.file;
   let avatar: string | undefined;
-  const { username, password, email } = req.body;
+  const { username, password, email ,bio} = req.body;
   
   try {
     if (!userId) {
@@ -314,6 +335,7 @@ export const updateUser: RequestHandler<
         username: username || existingUser.username,
         email: email || existingUser.email,
         avatar: avatar || existingUser.avatar,
+        bio: bio || existingUser.bio,
         password: password
           ? await bcrypt.hash(password, 10)
           : existingUser.password,
@@ -337,12 +359,18 @@ export const getProfile: RequestHandler = async (req, res, next) => {
     if (!username) {
       throw createHttpError(400, "Username is required");
     }
-    const user = await User.findOne({ username }).populate({
-      path: "posts",
+    const user = await User.findOne({ username })
+    .populate({ path : "posts",
       populate: {
-        path: "creator",
-      },
-    });
+        path : "creator"
+      }
+    })
+    .populate("likedPosts","title slug imageUrl tags category")
+    .populate("following","username avatar")
+    .populate("followers","username avatar")
+    
+    
+    
     if (!user) {
       throw createHttpError(404, "User not found");
     }
@@ -386,3 +414,104 @@ export const refreshToken: RequestHandler = async (req, res, next) => {
 };
 
 
+export const updateViewedPosts: RequestHandler = async (req, res, next) => {
+  // @ts-ignore
+  const userId: string | undefined = req.userId;
+  const { postId } = req.body;
+
+  try {
+    if (!userId) {
+      throw createHttpError(401, "Unauthorized Access Cannot update viewed posts");
+    }
+    if (!postId) {
+      throw createHttpError(400, "Post ID is required");
+    }
+
+ 
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw createHttpError(404, "User not found");
+    }
+
+    if (!user.viewedPosts.includes(postId)) {
+      user.viewedPosts.push(postId);
+      await user.save();
+    }
+
+    res.sendStatus(204)
+  } catch (error) {
+    next(error);
+  }
+}
+
+// add userid to the following array of the user and add the userId to the followers array of the user being followed
+// if the user is already following the user, do nothing
+export const followUser: RequestHandler = async (req, res, next) => {
+  // @ts-ignore
+  const userId: string | undefined = req.userId;
+  const { followUserId } = req.body;
+
+  try {
+    if (!userId) {
+      throw createHttpError(401, "Unauthorized Access Cannot follow user");
+    }
+    if (!followUserId) {
+      throw createHttpError(400, "Follow User ID is required");
+    }
+
+    const currentUser = await User.findById(userId);
+    const followUser = await User.findById(followUserId);
+    
+    if (!currentUser) {
+      throw createHttpError(404, "User not found");
+    }
+    if (!followUser) {
+      throw createHttpError(404, "User to follow not found");
+    }
+
+    if (!currentUser.following.includes(followUserId)) {
+      currentUser.following.push(followUserId);
+      followUser.followers.push(currentUser._id);
+      await currentUser.save();
+      await followUser.save();
+    }
+
+    res.sendStatus(201);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export const unfollowUser: RequestHandler = async (req, res, next) => {
+  // @ts-ignore
+  const userId: string | undefined = req.userId;
+  const { unfollowUserId } = req.body;
+
+  try {
+    if (!userId) {
+      throw createHttpError(401, "Unauthorized Access Cannot unfollow user");
+    }
+    if (!unfollowUserId) {
+      throw createHttpError(400, "Unfollow User ID is required");
+    }
+
+    const currentUser = await User.findById(userId);
+    const unfollowUser = await User.findById(unfollowUserId);
+    if (!currentUser) {
+      throw createHttpError(404, "User not found");
+    }
+    if (!unfollowUser) {
+      throw createHttpError(404, "User to unfollow not found");
+    }
+
+    currentUser.following = currentUser.following.filter(id => id.toString() !== unfollowUserId);
+    unfollowUser.followers = unfollowUser.followers.filter(id => id.toString() !== userId);
+    await currentUser.save();
+    await unfollowUser.save();
+
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+}

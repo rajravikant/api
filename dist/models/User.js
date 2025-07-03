@@ -9,11 +9,36 @@ const userSchema = new mongoose_1.Schema({
         type: String,
         default: "https://cdn-icons-png.flaticon.com/512/149/149071.png",
     },
+    bio: { type: String, default: "" },
+    followers: [
+        {
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: "User",
+        },
+    ],
+    following: [
+        {
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: "User",
+        },
+    ],
     posts: [
         {
             type: mongoose_1.Schema.Types.ObjectId,
             ref: "Post",
         },
     ],
+    likedPosts: [
+        {
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: "Post",
+        },
+    ],
+    viewedPosts: [
+        {
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: "Post",
+        },
+    ]
 }, { timestamps: true });
 exports.default = (0, mongoose_1.model)("User", userSchema);

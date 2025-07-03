@@ -12,12 +12,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deletePost = exports.updatePost = exports.createPost = exports.getPosts = void 0;
+exports.getRecommendations = exports.deletePost = exports.updatePost = exports.createPost = exports.getPostBySlug = exports.getPosts = void 0;
 const Post_1 = __importDefault(require("../models/Post"));
 const http_errors_1 = __importDefault(require("http-errors"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const User_1 = __importDefault(require("../models/User"));
 const multer_1 = require("../middlewares/multer");
+const Comment_1 = __importDefault(require("../models/Comment"));
+const Like_1 = require("../models/Like");
 const getPosts = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     const startIndex = req.query.startIndex
         ? parseInt(req.query.startIndex)
@@ -37,7 +39,9 @@ const getPosts = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
                 { category: { $regex: searchTerm, $options: "i" } },
             ],
         })))
-            .sort({ updatedAt: direction }).populate("creator", "username avatar").populate({ "path": "comments", "populate": "creator" })
+            .sort({ updatedAt: direction })
+            .populate("creator", "username avatar")
+            .populate({ path: "comments", populate: "creator" })
             .skip((startIndex - 1) * limit)
             .limit(limit)
             .exec();
@@ -52,6 +56,27 @@ const getPosts = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.getPosts = getPosts;
+const getPostBySlug = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    const { slug } = req.params;
+    try {
+        const post = yield Post_1.default.findOne({ slug })
+            .populate("creator", "username avatar")
+            .populate({ path: "comments", populate: "creator" })
+            .populate("likes")
+            .exec();
+        if (!post) {
+            throw (0, http_errors_1.default)(404, "Post not found");
+        }
+        // Increment the view count and also add the post to the user's viewed posts
+        post.views = (post.views || 0) + 1;
+        yield post.save();
+        res.status(200).json(post);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+exports.getPostBySlug = getPostBySlug;
 const createPost = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     const { title, content, category, summary, tags } = req.body;
     const file = req.file;
@@ -152,7 +177,10 @@ const deletePost = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
             throw (0, http_errors_1.default)(400, "Invalid post id");
         }
         yield Post_1.default.findByIdAndDelete(postId).exec();
-        yield User_1.default.updateOne({ _id: userId }, { $pull: { posts: postId } }).exec();
+        yield User_1.default.updateOne({ _id: userId }, { $pull: { posts: postId, likedPosts: postId, viewedPosts: postId } })
+            .exec();
+        yield Comment_1.default.deleteMany({ post: postId }).exec();
+        yield Like_1.LikeModel.deleteMany({ post: postId }).exec();
         res.status(204).json({ message: "Post deleted successfully" });
     }
     catch (error) {
@@ -160,3 +188,41 @@ const deletePost = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
     }
 });
 exports.deletePost = deletePost;
+// We can also improve the recommendations endpoint by considering the users following ,liked and viewed posts
+const getRecommendations = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    // @ts-ignore
+    const userId = req.userId;
+    try {
+        if (!userId)
+            throw (0, http_errors_1.default)(401, "Unauthorized");
+        const user = yield User_1.default.findById(userId)
+            .populate("likedPosts", "title category tags")
+            .populate("viewedPosts", "title category tags")
+            .exec();
+        if (!user)
+            throw (0, http_errors_1.default)(404, "User not found");
+        let tags = [];
+        let categories = [];
+        if (user.likedPosts && user.likedPosts.length > 0) {
+            user.likedPosts.forEach((post) => {
+                if (post.tags && post.tags.length > 0) {
+                    tags = [...tags, ...post.tags];
+                }
+                if (post.category) {
+                    categories.push(post.category);
+                }
+            });
+        }
+        const recommendedPosts = yield Post_1.default.find({
+            $or: [{ tags: { $in: tags } }, { category: { $in: categories } }],
+        })
+            .limit(6)
+            .populate("creator", "username avatar")
+            .exec();
+        res.status(200).json(recommendedPosts);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+exports.getRecommendations = getRecommendations;

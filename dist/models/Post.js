@@ -44,5 +44,15 @@ const postSchema = new mongoose_1.Schema({
             ref: "Comment",
         },
     ],
+    likes: [
+        {
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: "Like",
+        },
+    ],
+    views: {
+        type: Number,
+        default: 0,
+    }
 }, { timestamps: true });
 exports.default = (0, mongoose_1.model)("Post", postSchema);

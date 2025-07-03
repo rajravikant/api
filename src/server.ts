@@ -8,7 +8,10 @@ import { errorHandler } from "./middlewares/errorHandler";
 import postRoutes from "./routes/posts";
 import userRoutes from "./routes/users";
 import commentRoutes from "./routes/comment";
+import likeRoutes from "./routes/like"
 import connectDB from "./config/db";
+
+
 dotenv.config();
 
 const port = process.env.PORT || 5000;
@@ -40,6 +43,8 @@ app.get("/", (req, res) => {
 app.use("/api/posts", postRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/comment", commentRoutes);
+app.use("/api/like", likeRoutes);
+
 
 app.use(notFoundHandler);
 

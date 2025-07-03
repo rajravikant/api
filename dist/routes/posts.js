@@ -32,6 +32,8 @@ const isAuth_1 = require("../middlewares/isAuth");
 const multer_1 = require("../middlewares/multer");
 const router = express_1.default.Router();
 router.get("/", postController.getPosts);
+router.get("/recommendations", isAuth_1.isAuth, postController.getRecommendations);
+router.get("/:slug", postController.getPostBySlug);
 router
     .route("/create")
     .post(isAuth_1.isAuth, multer_1.upload.single("image"), postController.createPost);

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.refreshToken = exports.getProfile = exports.updateUser = exports.removeUser = exports.forgotPassword = exports.logout = exports.googleLogin = exports.login = exports.signUp = void 0;
+exports.unfollowUser = exports.followUser = exports.updateViewedPosts = exports.refreshToken = exports.getProfile = exports.updateUser = exports.removeUser = exports.forgotPassword = exports.logout = exports.googleLogin = exports.login = exports.signUp = void 0;
 const http_errors_1 = __importDefault(require("http-errors"));
 const User_1 = __importDefault(require("../models/User"));
 const Post_1 = __importDefault(require("../models/Post"));
@@ -20,6 +20,7 @@ const Comment_1 = __importDefault(require("../models/Comment"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const multer_1 = require("../middlewares/multer");
+const Like_1 = require("../models/Like");
 function generateTokens(userId) {
     const accessToken = jsonwebtoken_1.default.sign({ id: userId }, process.env.JWT_ACCESS_TOKEN_SECRET, {
         expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN,
@@ -92,7 +93,10 @@ const login = (req, res, next) => __awaiter(void 0, void 0, void 0, function* ()
             message: "Login successful",
             accessToken,
             refreshToken,
-            existingUser,
+            user: { userId: existingUser._id.toString(),
+                username: existingUser.username,
+                avatar: existingUser.avatar,
+            },
         });
     }
     catch (error) {
@@ -126,7 +130,7 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
                 message: "Login successful",
                 accessToken,
                 refreshToken,
-                existingUser,
+                user: { userId: existingUser._id.toString(), username: existingUser.username, avatar: existingUser.avatar },
             });
             return;
         }
@@ -156,7 +160,7 @@ const googleLogin = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
             message: "Login success",
             accessToken,
             refreshToken,
-            existingUser: NewUser,
+            user: { userId: NewUser._id.toString(), username: NewUser.username, avatar: NewUser.avatar },
         });
     }
     catch (error) {
@@ -222,9 +226,12 @@ const removeUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
             throw (0, http_errors_1.default)(401, "Unauthorized Access Cannot delete user");
         }
         yield User_1.default.findByIdAndDelete(userId);
-        // delete all posts and comments by user
+        // delete all posts, comments, and likes associated with the user
         yield Post_1.default.deleteMany({ creator: userId });
         yield Comment_1.default.deleteMany({ creator: userId });
+        yield Like_1.LikeModel.deleteMany({ creator: userId });
+        yield User_1.default.updateMany({ following: userId }, { $pull: { following: userId } });
+        yield User_1.default.updateMany({ followers: userId }, { $pull: { followers: userId } });
         res.status(200)
             .clearCookie("accessToken", {
             httpOnly: true,
@@ -246,7 +253,7 @@ const updateUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
     const userId = req.userId;
     const file = req.file;
     let avatar;
-    const { username, password, email } = req.body;
+    const { username, password, email, bio } = req.body;
     try {
         if (!userId) {
             throw (0, http_errors_1.default)(401, "Unauthorized Access Cannot update user");
@@ -262,6 +269,7 @@ const updateUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
             username: username || existingUser.username,
             email: email || existingUser.email,
             avatar: avatar || existingUser.avatar,
+            bio: bio || existingUser.bio,
             password: password
                 ? yield bcrypt_1.default.hash(password, 10)
                 : existingUser.password,
@@ -281,12 +289,15 @@ const getProfile = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
         if (!username) {
             throw (0, http_errors_1.default)(400, "Username is required");
         }
-        const user = yield User_1.default.findOne({ username }).populate({
-            path: "posts",
+        const user = yield User_1.default.findOne({ username })
+            .populate({ path: "posts",
             populate: {
-                path: "creator",
-            },
-        });
+                path: "creator"
+            }
+        })
+            .populate("likedPosts", "title slug imageUrl tags category")
+            .populate("following", "username avatar")
+            .populate("followers", "username avatar");
         if (!user) {
             throw (0, http_errors_1.default)(404, "User not found");
         }
@@ -319,3 +330,93 @@ const refreshToken = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.refreshToken = refreshToken;
+const updateViewedPosts = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    // @ts-ignore
+    const userId = req.userId;
+    const { postId } = req.body;
+    try {
+        if (!userId) {
+            throw (0, http_errors_1.default)(401, "Unauthorized Access Cannot update viewed posts");
+        }
+        if (!postId) {
+            throw (0, http_errors_1.default)(400, "Post ID is required");
+        }
+        const user = yield User_1.default.findById(userId);
+        if (!user) {
+            throw (0, http_errors_1.default)(404, "User not found");
+        }
+        if (!user.viewedPosts.includes(postId)) {
+            user.viewedPosts.push(postId);
+            yield user.save();
+        }
+        res.sendStatus(204);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+exports.updateViewedPosts = updateViewedPosts;
+// add userid to the following array of the user and add the userId to the followers array of the user being followed
+// if the user is already following the user, do nothing
+const followUser = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    // @ts-ignore
+    const userId = req.userId;
+    const { followUserId } = req.body;
+    try {
+        if (!userId) {
+            throw (0, http_errors_1.default)(401, "Unauthorized Access Cannot follow user");
+        }
+        if (!followUserId) {
+            throw (0, http_errors_1.default)(400, "Follow User ID is required");
+        }
+        const currentUser = yield User_1.default.findById(userId);
+        const followUser = yield User_1.default.findById(followUserId);
+        if (!currentUser) {
+            throw (0, http_errors_1.default)(404, "User not found");
+        }
+        if (!followUser) {
+            throw (0, http_errors_1.default)(404, "User to follow not found");
+        }
+        if (!currentUser.following.includes(followUserId)) {
+            currentUser.following.push(followUserId);
+            followUser.followers.push(currentUser._id);
+            yield currentUser.save();
+            yield followUser.save();
+        }
+        res.sendStatus(201);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+exports.followUser = followUser;
+const unfollowUser = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    // @ts-ignore
+    const userId = req.userId;
+    const { unfollowUserId } = req.body;
+    try {
+        if (!userId) {
+            throw (0, http_errors_1.default)(401, "Unauthorized Access Cannot unfollow user");
+        }
+        if (!unfollowUserId) {
+            throw (0, http_errors_1.default)(400, "Unfollow User ID is required");
+        }
+        const currentUser = yield User_1.default.findById(userId);
+        const unfollowUser = yield User_1.default.findById(unfollowUserId);
+        if (!currentUser) {
+            throw (0, http_errors_1.default)(404, "User not found");
+        }
+        if (!unfollowUser) {
+            throw (0, http_errors_1.default)(404, "User to unfollow not found");
+        }
+        currentUser.following = currentUser.following.filter(id => id.toString() !== unfollowUserId);
+        unfollowUser.followers = unfollowUser.followers.filter(id => id.toString() !== userId);
+        yield currentUser.save();
+        yield unfollowUser.save();
+        res.sendStatus(204);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+exports.unfollowUser = unfollowUser;

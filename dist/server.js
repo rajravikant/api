@@ -13,6 +13,7 @@ const errorHandler_1 = require("./middlewares/errorHandler");
 const posts_1 = __importDefault(require("./routes/posts"));
 const users_1 = __importDefault(require("./routes/users"));
 const comment_1 = __importDefault(require("./routes/comment"));
+const like_1 = __importDefault(require("./routes/like"));
 const db_1 = __importDefault(require("./config/db"));
 dotenv_1.default.config();
 const port = process.env.PORT || 5000;
@@ -32,6 +33,7 @@ app.get("/", (req, res) => {
 app.use("/api/posts", posts_1.default);
 app.use("/api/users", users_1.default);
 app.use("/api/comment", comment_1.default);
+app.use("/api/like", like_1.default);
 app.use(notFound_1.notFoundHandler);
 app.use(errorHandler_1.errorHandler);
 (0, db_1.default)()
